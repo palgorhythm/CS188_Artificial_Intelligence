@@ -75,7 +75,7 @@ class GnarAgent(CaptureAgent):
     '''
     self.opponents = self.getOpponents(gameState)
     self.team = self.getTeam(gameState)
-
+    self.centerPoints = [(gameState.data.layout.width/2,i+1) for i in range(gameState.data.layout.height-1) if not(gameState.hasWall(gameState.data.layout.width/2,i+1))]
   def chooseAction(self, gameState):
     """
     Picks among actions randomly.
@@ -134,10 +134,15 @@ class OffensiveReflexAgent(GnarAgent):
   we give you to get an idea of what an offensive agent might look like,
   but it is by no means the best or only way to build an offensive agent.
   """
+  #self.foodCaptured = 0
+
   def getFeatures(self, gameState, action):
     features = util.Counter()
     successor = self.getSuccessor(gameState, action)
+    myState = successor.getAgentState(self.index)
+
     features['successorScore'] = self.getScore(successor)
+
 
     # Compute distance to the nearest food
     foodList = self.getFood(successor).asList()
@@ -146,23 +151,46 @@ class OffensiveReflexAgent(GnarAgent):
       minDistance = min([self.getMazeDistance(myPos, food) for food in foodList])
       features['distanceToFood'] = minDistance
 
-    if gameState.getAgentPosition(self.opponents[0]) == None:
-      features['distanceToGhost0'] = 10
+    #get the ghost positions:
+    if (gameState.getAgentPosition(self.opponents[0]) == None or gameState.getAgentState(self.opponents[0]).isPacman):
+      features['distanceToGhost0'] = max(gameState.getAgentDistances()[self.opponents[0]],6)
+    elif (gameState.getAgentState(self.opponents[0]).scaredTimer > 0):
+      features['distanceToGhost0'] = gameState.data.layout.width
     else:
       features['distanceToGhost0'] = self.getMazeDistance(myPos, gameState.getAgentPosition(self.opponents[0]))
 
-    if gameState.getAgentPosition(self.opponents[1]) == None:
-      features['distanceToGhost1'] = 10
+    if (gameState.getAgentPosition(self.opponents[1]) == None or gameState.getAgentState(self.opponents[1]).isPacman):
+      features['distanceToGhost1'] = max(gameState.getAgentDistances()[self.opponents[1]],6)
+    elif (gameState.getAgentState(self.opponents[1]).scaredTimer > 0):
+      features['distanceToGhost0'] = gameState.data.layout.width
     else:
       features['distanceToGhost1'] = self.getMazeDistance(myPos, gameState.getAgentPosition(self.opponents[1]))
 
-    features['distToCenter'] = abs(gameState.data.layout.width/2 - myPos[0])
+
+    features['distToCenter'] = min([self.getMazeDistance(myPos,centerPoint) for centerPoint in self.centerPoints])#*myState.numCarrying
+    
+    features['numCarrying'] = myState.numCarrying
+
+    features['distToCenterTimesNumCarrying'] = features['distToCenter']*features['numCarrying']
+
+    #distance to closest capsule
+    if gameState.isOnRedTeam(self.index):
+      if gameState.getBlueCapsules() != []:
+        features['distanceToCapsule'] = min([self.getMazeDistance(myPos,capsule) for capsule in gameState.getBlueCapsules()])
+      else: features['distanceToCapsule'] = 0
+    else:
+      if gameState.getBlueCapsules() != []:
+        features['distanceToCapsule'] = min([self.getMazeDistance(myPos,capsule) for capsule in gameState.getRedCapsules()])
+      else: features['distanceToCapsule'] = 0  
+    
+    print features['distanceToCapsule']
+
     return features
 
     
 
   def getWeights(self, gameState, action):
-    return {'successorScore': 100, 'distanceToFood': -1, 'distanceToGhost0': 5, 'distanceToGhost1': 5, 'distanceToCenter': -0.5}
+    return {'successorScore': 100, 'distanceToFood': -1, 'distanceToGhost0': 5, 'distanceToGhost1': 5, 'distanceToCenter': -0.1, 'numCarrying': -0.1, 'distToCenterTimesNumCarrying': -0.5, 'distanceToCapsule': -10}
 
 class DefensiveReflexAgent(GnarAgent):
   """
